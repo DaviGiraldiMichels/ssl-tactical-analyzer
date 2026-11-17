@@ -1,0 +1,133 @@
+# Sistema de Análise de Dados e Avaliação Tática para a Competição SSL (RoboCup)
+
+Projeto de Iniciação Científica (PROBIC/UDESC) vinculado ao projeto de pesquisa **NPP3262-2022 - Coordenação e colaboração em Sistemas Multirrobôs**.
+
+- **Instituição:** Universidade do Estado de Santa Catarina (UDESC) - Centro de Educação do Planalto Norte (CEPLAN)
+- **Departamento:** Departamento de Sistemas de Informação
+- **Orientadora:** Profa. Dra. Vivian Cremer Kalempa
+- **Bolsista:** Davi Giraldi Michels (Edital PROPPG Nº 01/2026 - PIC&DTI)
+
+---
+
+## ⚽ Visão Geral
+
+Este sistema computacional foi desenvolvido para a **Small Size League (SSL)** da RoboCup. Ele ingere fluxos de dados brutos e serializados gerados por simuladores (*grSim*, *ssl-simulation*) e pelo sistema de visão oficial (*SSL-Vision*), realiza a limpeza e normalização espaço-temporal dos dados e extrai métricas táticas quantitativas em tempo real ou no pós-jogo.
+
+O objetivo principal é fornecer à equipe de robótica da UDESC diagnósticos científicos objetivos para mensurar, auditar e aprimorar a tomada de decisão da inteligência artificial (baseada em regras ou em **Aprendizado por Reforço - RL**).
+
+---
+
+## 🛠️ Arquitetura do Software
+
+```mermaid
+flowchart LR
+    Log[".log / .log.gz<br/>(RoboCup SSL)"] --> Reader["SSLLogReader<br/>(Binary Unpacker)"]
+    Reader --> Decoder["SSLProtoDecoder<br/>(Protobuf Deserializer)"]
+    Decoder --> Cleaner["SSLDataCleaner<br/>(Normalização & Fusão)"]
+    Cleaner --> Engine["Motor de Métricas Táticas"]
+    
+    subgraph Engine ["Motor de Métricas Táticas"]
+        M1["Posse de Bola & Zonas"]
+        M2["Redes de Passe & Interceptações"]
+        M3["Pitch Control & Dominância"]
+        M4["Expected Goals (xG)"]
+    end
+    
+    Engine --> Output["Visualizadores & Relatórios"]
+    Output --> Term["Sumário no Terminal"]
+    Output --> HTML["Dashboard HTML Interativo"]
+    Output --> PNG["Pitch 2D com Heatmap"]
+```
+
+### Módulos Principais:
+1. `proto/`: Especificações oficiais Protocol Buffers da SSL (`messages_robocup_ssl_detection.proto`, `messages_robocup_ssl_geometry.proto`, `messages_robocup_ssl_wrapper.proto`, `ssl_referee.proto`).
+2. `src/parser/`:
+   - `binary_reader.py`: Leitor e gravador de alta performance para arquivos binários `.log` e compactados `.log.gz`.
+   - `proto_decoder.py`: Deserializador dos pacotes de visão (`SSL_WrapperPacket`) e árbitro eletrônico (`SSL_Referee`).
+   - `cleaner.py`: Fusão de câmeras, interpolação temporal de quadros a 60 Hz e conversão de coordenadas para metros.
+3. `src/metrics/`:
+   - `possession.py`: Cálculo de posse individual e coletiva, disputas de bola, turnovers e ocupação por terço do campo (defesa, meio, ataque).
+   - `passing.py`: Detecção automática de chutes e passes, cálculo de distância, acurácia e matriz de adjacência (rede de passes).
+   - `pitch_control.py`: Superfície contínua de dominância espacial (modelo físico de Spearman / Fernandez-Bornn vetorizado com NumPy) e métricas de compactação defensiva.
+   - `xg.py`: Modelo de Expected Goals adaptado para robôs SSL com base no ângulo visível do gol, distância e obstrução de defensores.
+4. `src/visualizer/`:
+   - `pitch_2d.py`: Renderizador do campo de futebol 2D oficial (Divisão A e B) com robôs, orientações e trajetórias da bola.
+   - `report.py`: Gerador de relatórios executivos em texto plano e relatórios web completos em HTML.
+
+---
+
+## 🚀 Instalação e Uso
+
+### 1. Clonar o Repositório e Configurar Ambiente
+```bash
+git clone <url-do-repositorio>
+cd "Sistema de Análise de Dados e Avaliação Tática para a Competição SSL"
+
+# Instalar dependências
+pip install -r requirements.txt
+```
+
+### 2. Gerar Dados de Partida Simulada (Fixture)
+Para testar o pipeline sem precisar de uma partida física gravada, utilize o gerador de partidas sintéticas:
+```bash
+python3 scripts/generate_synthetic_log.py
+```
+Isso criará uma partida simulada em `data/sample_matches/synthetic_match.log.gz`.
+
+### 3. Executar a Análise Tática via CLI
+```bash
+python3 -m src.cli --log data/sample_matches/synthetic_match.log.gz --output-dir output/
+```
+
+O comando irá:
+1. Processar todos os frames binários do jogo;
+2. Exibir o sumário tático completo no terminal;
+3. Gerar um relatório interativo em HTML em `output/relatorio_tatico.html`;
+4. Gerar a imagem 2D com mapa de calor de Pitch Control em `output/pitch_overview.png`.
+
+### 4. Executar os Testes Automatizados
+```bash
+python3 -m unittest discover tests -v
+```
+
+---
+
+## 📊 Exemplo de Saída do Relatório Tático
+
+```text
+======================================================================
+          RELATÓRIO TÁTICO PÓS-JOGO - ROBOCUP SSL
+          UDESC Robotics (Amarelo) vs ER-Force (Azul)
+======================================================================
+Duração Total Analisada: 10.0 s
+----------------------------------------------------------------------
+MÉTRICA                             | UDESC Robotics  |    ER-Force    
+----------------------------------------------------------------------
+Posse de Bola (Tempo)               |           5.7s |           0.0s
+Posse de Bola (%)                   |          100.0% |            0.0%
+  - Terço Defensivo                 |           1.0s |           0.0s
+  - Terço Central                   |           3.5s |           0.0s
+  - Terço Ofensivo                  |           1.1s |           0.0s
+Perdas de Posse (Turnovers)         |               0 |               0
+----------------------------------------------------------------------
+Passes Totais                       |               3 |               0
+Passes Certos                       |               2 |               0
+Acurácia de Passe (%)               |           66.7% |            0.0%
+Passes Interceptados                |               0 |               0
+----------------------------------------------------------------------
+Finalizações (Chutes)               |               2 |               0
+Expected Goals (xG Total)           |            0.35 |            0.00
+======================================================================
+Domínio Espacial Médio (Pitch Ctrl) |           57.7% |           42.3%
+Compactação Média (Raio Spread)     |          0.99m |          0.41m
+======================================================================
+```
+
+---
+
+## 📅 Próximos Passos no Cronograma da IC
+
+- [x] **Mês 1-3:** Estudo dos logs, compilação de schemas Protobuf e implementação do parser binário de alta performance (`.log` / `.log.gz`).
+- [x] **Mês 4-6:** Implementação do motor de métricas táticas (Posse de bola, Redes de passe, Pitch Control e Expected Goals).
+- [ ] **Mês 7-9:** Desenvolvimento de aplicação web interativa em **Streamlit** com reprodução contínua da partida e filtros por tempo/lance.
+- [ ] **Mês 10-12:** Testes com logs reais da RoboCup mundial e validação da estratégia com os jogos simulados no *grSim* pela equipe da UDESC. Redação do Relatório Final PROBIC e artigo científico.
