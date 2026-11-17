@@ -74,7 +74,18 @@ python3 scripts/generate_synthetic_log.py
 ```
 Isso criará uma partida simulada em `data/sample_matches/synthetic_match.log.gz`.
 
-### 3. Executar a Análise Tática via CLI
+### 3. Gravar Partida ao Vivo via Rede (Multicast UDP)
+Quando estiver jogando uma partida no laboratório (no `grSim` ou com os robôs reais e *SSL-Vision*):
+```bash
+# Gravar a partida em tempo real (salva automaticamente com data e hora):
+python3 -m src.recorder
+
+# Ou especificando o nome do arquivo:
+python3 -m src.recorder --output data/raw/minha_partida.log.gz
+```
+O gravador mostrará o status em tempo real (tempo decorrido, taxa de quadros/fps da visão e mensagens do juiz). Ao terminar a partida, basta pressionar **Ctrl + C** e o arquivo estará pronto para ser analisado.
+
+### 4. Executar a Análise Tática via CLI
 ```bash
 python3 -m src.cli --log data/sample_matches/synthetic_match.log.gz --output-dir output/
 ```
