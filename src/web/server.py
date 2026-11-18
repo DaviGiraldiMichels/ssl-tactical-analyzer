@@ -187,6 +187,45 @@ class MatchCache:
                 "saves": analyzer.defense_analyzer.blue_stats.saves_by_robot.get(r_id, 0),
             }
 
+        # Pass Networks (Nodes at average positions, weighted directed edges)
+        y_pass_network = {
+            "nodes": [
+                {
+                    "id": r_id,
+                    "x": round(prof.avg_x, 3),
+                    "y": round(prof.avg_y, 3),
+                    "total_passes": analyzer.pass_analyzer.yellow_stats.passes_by_robot.get(r_id, 0)
+                    + analyzer.pass_analyzer.yellow_stats.receptions_by_robot.get(r_id, 0),
+                }
+                for r_id, prof in analyzer.kinematics_analyzer.yellow_stats.profiles.items()
+            ],
+            "edges": [
+                {"from": p_id, "to": r_id, "count": cnt}
+                for p_id, targets in analyzer.pass_analyzer.yellow_stats.pass_matrix.items()
+                for r_id, cnt in targets.items()
+                if p_id != r_id
+            ],
+        }
+
+        b_pass_network = {
+            "nodes": [
+                {
+                    "id": r_id,
+                    "x": round(prof.avg_x, 3),
+                    "y": round(prof.avg_y, 3),
+                    "total_passes": analyzer.pass_analyzer.blue_stats.passes_by_robot.get(r_id, 0)
+                    + analyzer.pass_analyzer.blue_stats.receptions_by_robot.get(r_id, 0),
+                }
+                for r_id, prof in analyzer.kinematics_analyzer.blue_stats.profiles.items()
+            ],
+            "edges": [
+                {"from": p_id, "to": r_id, "count": cnt}
+                for p_id, targets in analyzer.pass_analyzer.blue_stats.pass_matrix.items()
+                for r_id, cnt in targets.items()
+                if p_id != r_id
+            ],
+        }
+
         result = {
             "metadata": {
                 "yellow_name": analyzer.yellow_team_name,
@@ -226,6 +265,7 @@ class MatchCache:
             },
             "events": events_feed,
             "profiles": {"yellow": y_profiles, "blue": b_profiles},
+            "pass_network": {"yellow": y_pass_network, "blue": b_pass_network},
             "frames": web_frames,
         }
 
