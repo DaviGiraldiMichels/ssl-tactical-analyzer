@@ -21,6 +21,16 @@ class RobotKinematicProfile:
     sprints_count: int = 0  # bursts above 2.0 m/s
     speed_samples_count: int = 0
     accumulated_speed: float = 0.0
+    accumulated_x: float = 0.0
+    accumulated_y: float = 0.0
+
+    @property
+    def avg_x(self) -> float:
+        return self.accumulated_x / max(1, self.speed_samples_count)
+
+    @property
+    def avg_y(self) -> float:
+        return self.accumulated_y / max(1, self.speed_samples_count)
 
 
 @dataclass
@@ -70,6 +80,8 @@ class KinematicsAnalyzer:
                 self.yellow_stats.max_team_speed_ms = speed
 
             prof.accumulated_speed += speed
+            prof.accumulated_x += r.x
+            prof.accumulated_y += r.y
             prof.speed_samples_count += 1
             prof.avg_speed_ms = prof.accumulated_speed / prof.speed_samples_count
 
@@ -103,6 +115,8 @@ class KinematicsAnalyzer:
                 self.blue_stats.max_team_speed_ms = speed
 
             prof.accumulated_speed += speed
+            prof.accumulated_x += r.x
+            prof.accumulated_y += r.y
             prof.speed_samples_count += 1
             prof.avg_speed_ms = prof.accumulated_speed / prof.speed_samples_count
 

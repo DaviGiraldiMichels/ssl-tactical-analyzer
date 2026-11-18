@@ -108,10 +108,14 @@ class PassAnalyzer:
             if current_possessor is not None:
                 team, r_id = current_possessor
                 # Same robot holding it right after kick? Wait until ball leaves
-                if team == self._active_pass_team and r_id == self._active_passer_id and dt < 0.2:
-                    pass  # Still at passer
+                if team == self._active_pass_team and r_id == self._active_passer_id:
+                    if dt < 0.2:
+                        pass  # Still at passer
+                    else:
+                        # Regained ball without teammate intervention (dribble / loose touch)
+                        self._active_pass_team = None
                 elif team == self._active_pass_team:
-                    # Completed pass!
+                    # Completed pass to a teammate!
                     self._record_pass(
                         PassEvent(
                             timestamp_start=self._pass_start_time,
