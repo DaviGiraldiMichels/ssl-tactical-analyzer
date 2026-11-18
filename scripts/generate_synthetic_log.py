@@ -1,9 +1,10 @@
 """
 Generates a realistic synthetic SSL match log file (.log.gz).
-Simulates referee commands and 10 seconds of 60 Hz vision frames:
+Simulates referee commands and 12 seconds of 60 Hz vision frames:
 - Yellow robot 0 conducts the ball
 - Yellow robot 0 passes to Yellow robot 1
-- Yellow robot 1 receives the pass and shoots on Blue's goal
+- Yellow robot 1 shoots on goal, and Blue Goalie #0 makes a dynamic SAVE!
+- Blue robot 1 recovers the deflected ball and tackles/clears it forward
 """
 
 import math
@@ -15,12 +16,12 @@ root_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(root_dir))
 sys.path.insert(0, str(root_dir / "src"))
 
-from src.proto import detection_pb2, referee_pb2, wrapper_pb2
 from src.parser.binary_reader import (
     MESSAGE_SSL_REFBOX_2013,
     MESSAGE_SSL_VISION_2014,
     SSLLogWriter,
 )
+from src.proto import detection_pb2, referee_pb2, wrapper_pb2
 
 
 def create_referee_packet(
@@ -55,7 +56,7 @@ def create_referee_packet(
     return ref.SerializeToString()
 
 
-def generate_synthetic_match(output_file: str, duration_sec: float = 10.0, fps: int = 60):
+def generate_synthetic_match(output_file: str, duration_sec: float = 12.0, fps: int = 60):
     out_path = Path(output_file)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -74,13 +75,13 @@ def generate_synthetic_match(output_file: str, duration_sec: float = 10.0, fps: 
     # Initial positions (in mm, as SSL-Vision uses mm)
     # Yellow team
     y0_x, y0_y = -2000.0, 0.0
-    y1_x, y1_y = 1000.0, 1000.0
-    y2_x, y2_y = -3500.0, 0.0  # Goalie
+    y1_x, y1_y = 1000.0, 800.0
+    y2_x, y2_y = -3800.0, 0.0  # Goalie
 
     # Blue team
-    b0_x, b0_y = 3500.0, 0.0   # Goalie
-    b1_x, b1_y = 500.0, 0.0
-    b2_x, b2_y = 1800.0, -1000.0
+    b0_x, b0_y = 4200.0, 0.0   # Goalie in box
+    b1_x, b1_y = 800.0, -300.0
+    b2_x, b2_y = 2000.0, 500.0
 
     # Ball
     ball_x, ball_y = -1900.0, 0.0
@@ -100,14 +101,13 @@ def generate_synthetic_match(output_file: str, duration_sec: float = 10.0, fps: 
             ball_y = y0_y
             y0_orient = 0.0
 
-        # 3s - 4.5s: Robot 0 kicks pass to Robot 1 at (1000, 1000)
+        # 3s - 4.5s: Robot 0 kicks pass to Robot 1 at (1000, 800)
         elif 3.0 <= t_sec < 4.5:
             if t_sec == 3.0:
-                # Impulse towards y1
                 dx = y1_x - ball_x
                 dy = y1_y - ball_y
                 dist = math.hypot(dx, dy)
-                speed = 2200.0  # 2.2 m/s in mm/s
+                speed = 2200.0  # 2.2 m/s
                 ball_vx = (dx / dist) * speed
                 ball_vy = (dy / dist) * speed
 
@@ -115,31 +115,57 @@ def generate_synthetic_match(output_file: str, duration_sec: float = 10.0, fps: 
             ball_y += ball_vy * dt
             y0_orient = math.atan2(y1_y - y0_y, y1_x - y0_x)
 
-        # 4.5s - 7s: Robot 1 controls the ball and turns to goal
-        elif 4.5 <= t_sec < 7.0:
-            ball_x = y1_x + 90.0 * math.cos(0.2)
-            ball_y = y1_y + 90.0 * math.sin(0.2)
-            y1_x += 300.0 * dt
+        # 4.5s - 6.5s: Robot 1 controls the ball, advances and aims at goal
+        elif 4.5 <= t_sec < 6.5:
+            ball_x = y1_x + 90.0 * math.cos(0.1)
+            ball_y = y1_y + 90.0 * math.sin(0.1)
+            y1_x += 500.0 * dt
             y1_y -= 100.0 * dt
-            y0_orient = 0.0
+            b1_x += 300.0 * dt  # Blue 1 presses
 
-        # 7s - 8s: Robot 1 shoots towards opponent goal (4500, 0)
-        elif 7.0 <= t_sec < 8.0:
-            if t_sec == 7.0:
+        # 6.5s - 7.5s: Robot 1 takes a dangerous shot on Blue's goal!
+        elif 6.5 <= t_sec < 7.5:
+            if t_sec == 6.5:
                 dx = 4500.0 - ball_x
                 dy = 0.0 - ball_y
                 dist = math.hypot(dx, dy)
-                speed = 4500.0  # 4.5 m/s shot
+                speed = 4200.0  # 4.2 m/s shot
                 ball_vx = (dx / dist) * speed
                 ball_vy = (dy / dist) * speed
 
             ball_x += ball_vx * dt
             ball_y += ball_vy * dt
 
-        # 8s - 10s: Ball is inside goal or stopped
+            # Blue Goalie smoothly slides to block (max 2.0 m/s)
+            target_y = ball_y * 0.7
+            diff_y = target_y - b0_y
+            step_y = math.copysign(min(abs(diff_y), 2000.0 * dt), diff_y)
+            b0_y += step_y
+
+        # 7.5s - 9.0s: Goalie #0 makes the SAVE! Ball deflects sideways
+        elif 7.5 <= t_sec < 9.0:
+            if t_sec == 7.5:
+                # Deflection
+                ball_vx = -600.0
+                ball_vy = -800.0
+
+            ball_x += ball_vx * dt
+            ball_y += ball_vy * dt
+            # Blue 2 rushes to clear with realistic speed
+            dx = ball_x - b2_x
+            dy = ball_y - b2_y
+            d = math.hypot(dx, dy)
+            if d > 1e-3:
+                spd = min(d, 2200.0 * dt)
+                b2_x += (dx / d) * spd
+                b2_y += (dy / d) * spd
+
+        # 9.0s - 12.0s: Blue 2 takes control (Recovery) and clears forward
         else:
-            ball_x = 4600.0
-            ball_y = 0.0
+            ball_x = b2_x - 90.0
+            ball_y = b2_y
+            b2_x -= 600.0 * dt  # clearing towards yellow field
+            b2_y += 100.0 * dt
 
         # Create Protobuf Detection Frame
         wrapper = wrapper_pb2.SSL_WrapperPacket()
@@ -172,7 +198,7 @@ def generate_synthetic_match(output_file: str, duration_sec: float = 10.0, fps: 
         ry1.robot_id = 1
         ry1.x = y1_x
         ry1.y = y1_y
-        ry1.orientation = 0.2
+        ry1.orientation = 0.1
         ry1.confidence = 0.99
         ry1.pixel_x = 200.0
         ry1.pixel_y = 200.0
@@ -214,14 +240,13 @@ def generate_synthetic_match(output_file: str, duration_sec: float = 10.0, fps: 
         rb2.pixel_x = 450.0
         rb2.pixel_y = 450.0
 
-        # Serialize
         payload = wrapper.SerializeToString()
         writer.write_record(curr_ts_ns, MESSAGE_SSL_VISION_2014, payload)
 
     writer.close()
-    print(f"[+] Arquivo sintético gerado com sucesso: {out_path} ({out_path.stat().st_size} bytes)")
+    print(f"[+] Arquivo sintético atualizado: {out_path} ({out_path.stat().st_size} bytes)")
 
 
 if __name__ == "__main__":
     target = "data/sample_matches/synthetic_match.log.gz"
-    generate_synthetic_match(target, duration_sec=10.0, fps=60)
+    generate_synthetic_match(target, duration_sec=12.0, fps=60)

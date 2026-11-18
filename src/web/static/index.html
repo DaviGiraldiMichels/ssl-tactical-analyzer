@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SSL Tactical Dashboard & 2D Player | UDESC CEPLAN</title>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --card-bg: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --yellow-team: #eab308;
+      --blue-team: #3b82f6;
+      --pitch-green: #14532d;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Top Navigation */
+    header {
+      background: #0f172a;
+      border-bottom: 1px solid var(--border);
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 60px;
+      flex-shrink: 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand h1 {
+      font-size: 18px;
+      margin: 0;
+      color: var(--accent);
+      font-weight: 700;
+    }
+    .brand span {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .match-select-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    select {
+      background: var(--card-bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      outline: none;
+      cursor: pointer;
+      max-width: 380px;
+    }
+    select:focus { border-color: var(--accent); }
+
+    /* Main Container (Two Columns) */
+    .main-layout {
+      display: flex;
+      flex: 1;
+      height: calc(100vh - 60px);
+      overflow: hidden;
+    }
+
+    /* Left Side: Pitch Player & Timeline */
+    .player-section {
+      flex: 1.45;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+    }
+
+    .pitch-container {
+      background: #022c22;
+      border-radius: 12px;
+      border: 2px solid #065f46;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      margin-bottom: 12px;
+      min-height: 480px;
+      padding: 10px;
+    }
+
+    canvas {
+      display: block;
+      border-radius: 8px;
+      background: #14532d;
+    }
+
+    /* RefBox overlay on top of field */
+    .ref-badge {
+      position: absolute;
+      top: 18px;
+      left: 20px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid var(--border);
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #38bdf8;
+      backdrop-filter: blur(4px);
+      z-index: 10;
+    }
+
+    .div-badge {
+      position: absolute;
+      top: 18px;
+      right: 20px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid var(--border);
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #cbd5e1;
+      backdrop-filter: blur(4px);
+      z-index: 10;
+    }
+
+    /* Controls Bar */
+    .controls-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .timeline-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .time-display {
+      font-family: monospace;
+      font-size: 14px;
+      font-weight: bold;
+      color: var(--accent);
+      width: 120px;
+      text-align: center;
+    }
+
+    input[type=range] {
+      flex: 1;
+      height: 6px;
+      background: #475569;
+      border-radius: 3px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .buttons-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    button {
+      background: #334155;
+      color: var(--text);
+      border: none;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: background 0.2s;
+    }
+    button:hover { background: #475569; }
+    button.primary {
+      background: #0284c7;
+      color: white;
+    }
+    button.primary:hover { background: #0369a1; }
+
+    .speed-btn.active {
+      background: var(--accent);
+      color: #0f172a;
+    }
+
+    /* Events Feed Bar */
+    .events-scroll {
+      margin-top: 12px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      white-space: nowrap;
+      min-height: 52px;
+      align-items: center;
+    }
+
+    .event-chip {
+      background: #334155;
+      padding: 5px 12px;
+      border-radius: 16px;
+      font-size: 12px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .event-chip:hover {
+      border-color: var(--accent);
+      background: #475569;
+      transform: translateY(-1px);
+    }
+    .event-chip.shot { border-left: 3px solid #f97316; }
+    .event-chip.save { border-left: 3px solid #10b981; }
+    .event-chip.pass { border-left: 3px solid #38bdf8; }
+    .event-chip.tackle { border-left: 3px solid #a855f7; }
+
+    /* Right Side: Tactical Analytics Dashboard */
+    .analytics-section {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .kpi-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .kpi-card h3 {
+      margin: 0 0 8px 0;
+      font-size: 13px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .kpi-stat-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 14px;
+      margin: 4px 0;
+    }
+
+    .progress-bar-wrap {
+      height: 8px;
+      background: #475569;
+      border-radius: 4px;
+      overflow: hidden;
+      display: flex;
+      margin: 8px 0;
+    }
+    .pb-y { background: var(--yellow-team); }
+    .pb-b { background: var(--blue-team); }
+
+    .badge-y { color: var(--yellow-team); font-weight: bold; }
+    .badge-b { color: #60a5fa; font-weight: bold; }
+
+    /* Robot Profiles Table */
+    .table-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+    }
+    .table-card h3 {
+      margin: 0 0 10px 0;
+      font-size: 15px;
+      color: var(--text);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      padding: 7px 6px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    th { color: var(--text-muted); font-weight: 600; }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header>
+    <div class="brand">
+      <h1>⚽ SSL Tactical Player</h1>
+      <span>UDESC CEPLAN | PROBIC NPP3262-2022</span>
+    </div>
+
+    <div class="match-select-container">
+      <span style="font-size: 13px; color: var(--text-muted);">Partida:</span>
+      <select id="matchSelect" onchange="loadSelectedMatch()">
+        <option value="">Carregando lista de partidas...</option>
+      </select>
+      <button onclick="refreshMatchList()">🔄 Atualizar</button>
+    </div>
+  </header>
+
+  <!-- Main Layout -->
+  <div class="main-layout">
+
+    <!-- Left: Pitch Player Canvas -->
+    <div class="player-section">
+      <div class="pitch-container" id="pitchContainer">
+        <div class="ref-badge" id="refBadge">RefBox: STOP</div>
+        <div class="div-badge" id="divBadge">Divisão: B (9x6m)</div>
+        <canvas id="pitchCanvas" width="800" height="560"></canvas>
+      </div>
+
+      <!-- Controls -->
+      <div class="controls-card">
+        <div class="timeline-row">
+          <button id="playBtn" class="primary" onclick="togglePlay()">▶ Play</button>
+          <button onclick="stepFrame(-1)">⏪ -1s</button>
+          <button onclick="stepFrame(1)">⏩ +1s</button>
+          <input type="range" id="timeSlider" min="0" max="100" value="0" oninput="onSliderScrub(this.value)">
+          <div class="time-display" id="timeDisplay">00:00 / 00:00</div>
+        </div>
+
+        <div class="buttons-row">
+          <div class="btn-group">
+            <span style="font-size: 12px; color: var(--text-muted);">Velocidade:</span>
+            <button class="speed-btn" onclick="setSpeed(0.5, this)">0.5x</button>
+            <button class="speed-btn active" onclick="setSpeed(1.0, this)">1x</button>
+            <button class="speed-btn" onclick="setSpeed(2.0, this)">2x</button>
+            <button class="speed-btn" onclick="setSpeed(4.0, this)">4x</button>
+          </div>
+
+          <div class="btn-group">
+            <label style="font-size: 12px; color: var(--text-muted); cursor: pointer;">
+              <input type="checkbox" id="trailToggle" checked> Rastro
+            </label>
+            <label style="font-size: 12px; color: var(--text-muted); cursor: pointer; margin-left: 8px;">
+              <input type="checkbox" id="velVectorToggle" checked> Vetores de Chute
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Events Jump Bar -->
+      <div class="events-scroll" id="eventsBar">
+        <span style="font-size: 12px; color: var(--text-muted);">Nenhum evento registrado ainda.</span>
+      </div>
+    </div>
+
+    <!-- Right: Tactical Analytics KPIs -->
+    <div class="analytics-section">
+      
+      <!-- Overview Teams -->
+      <div class="kpi-card">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h2 id="yellowTeamName" class="badge-y" style="margin: 0; font-size: 18px;">Yellow Team</h2>
+          <span style="font-size: 13px; color: var(--text-muted);">vs</span>
+          <h2 id="blueTeamName" class="badge-b" style="margin: 0; font-size: 18px;">Blue Team</h2>
+        </div>
+        <div style="text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+          Duração total: <span id="matchDuration">0.0</span> s | <span id="divisionDetail">Divisão B (9x6m)</span>
+        </div>
+      </div>
+
+      <!-- KPI Grid -->
+      <div class="kpi-grid">
+        <!-- Posse -->
+        <div class="kpi-card">
+          <h3>Posse de Bola</h3>
+          <div class="kpi-stat-row">
+            <span class="badge-y" id="posPctY">50%</span>
+            <span class="badge-b" id="posPctB">50%</span>
+          </div>
+          <div class="progress-bar-wrap">
+            <div id="pbY" class="pb-y" style="width: 50%;"></div>
+            <div id="pbB" class="pb-b" style="width: 50%;"></div>
+          </div>
+          <div class="kpi-stat-row" style="font-size: 12px; color: var(--text-muted);">
+            <span>Tempo: <b id="posSecY">0s</b></span>
+            <span>Tempo: <b id="posSecB">0s</b></span>
+          </div>
+        </div>
+
+        <!-- Passes -->
+        <div class="kpi-card">
+          <h3>Passes & Acurácia</h3>
+          <div class="kpi-stat-row">
+            <span>Passes: <b class="badge-y" id="passTotY">0</b></span>
+            <span>Passes: <b class="badge-b" id="passTotB">0</b></span>
+          </div>
+          <div class="kpi-stat-row">
+            <span>Acurácia: <b class="badge-y" id="passAccY">0%</b></span>
+            <span>Acurácia: <b class="badge-b" id="passAccB">0%</b></span>
+          </div>
+          <div class="kpi-stat-row" style="font-size: 12px; color: var(--text-muted);">
+            <span>Certos: <span id="passOkY">0</span></span>
+            <span>Certos: <span id="passOkB">0</span></span>
+          </div>
+        </div>
+
+        <!-- Finalizações & xG -->
+        <div class="kpi-card">
+          <h3>Ataque & Expected Goals (xG)</h3>
+          <div class="kpi-stat-row">
+            <span>Chutes: <b class="badge-y" id="shotsY">0</b></span>
+            <span>Chutes: <b class="badge-b" id="shotsB">0</b></span>
+          </div>
+          <div class="kpi-stat-row">
+            <span>xG Total: <b class="badge-y" id="xgY">0.00</b></span>
+            <span>xG Total: <b class="badge-b" id="xgB">0.00</b></span>
+          </div>
+        </div>
+
+        <!-- Defesa & Goleiro -->
+        <div class="kpi-card">
+          <h3>Defesa & Goleiro</h3>
+          <div class="kpi-stat-row">
+            <span>Roubos (Desarmes):</span>
+            <span><b class="badge-y" id="tacklesY">0</b> vs <b class="badge-b" id="tacklesB">0</b></span>
+          </div>
+          <div class="kpi-stat-row">
+            <span>Defesas do Goleiro:</span>
+            <span><b class="badge-y" id="savesY">0</b> vs <b class="badge-b" id="savesB">0</b></span>
+          </div>
+          <div class="kpi-stat-row">
+            <span>Gols Evitados:</span>
+            <span><b class="badge-y" id="prevY">0.00</b> vs <b class="badge-b" id="prevB">0.00</b></span>
+          </div>
+        </div>
+
+        <!-- Físico / Cinemática -->
+        <div class="kpi-card" style="grid-column: span 2;">
+          <h3>Desempenho Físico & Cinemática</h3>
+          <div class="kpi-stat-row">
+            <span>Distância Total Percorrida:</span>
+            <span><b class="badge-y" id="distY">0.0 m</b> vs <b class="badge-b" id="distB">0.0 m</b></span>
+          </div>
+          <div class="kpi-stat-row">
+            <span>Velocidade Máxima de Pico:</span>
+            <span><b class="badge-y" id="spdY">0.00 m/s</b> vs <b class="badge-b" id="spdB">0.00 m/s</b></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Robot Performance Table -->
+      <div class="table-card">
+        <h3>
+          <span>Desempenho Individual dos Robôs</span>
+          <div style="font-size: 12px;">
+            <label><input type="radio" name="teamTable" value="yellow" checked onchange="renderRobotTable()"> Amarelo</label>
+            <label style="margin-left: 8px;"><input type="radio" name="teamTable" value="blue" onchange="renderRobotTable()"> Azul</label>
+          </div>
+        </h3>
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Passes</th>
+              <th>Posse</th>
+              <th>Desarmes</th>
+              <th>Defesas</th>
+              <th>Distância</th>
+              <th>Velocidade Máx</th>
+              <th>Sprints</th>
+            </tr>
+          </thead>
+          <tbody id="robotTableBody">
+            <tr><td colspan="8">Selecione uma partida para ver os dados.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // App State
+    let currentMatchData = null;
+    let frames = [];
+    let currentFrameIdx = 0;
+    let isPlaying = false;
+    let playbackSpeed = 1.0;
+    let animReqId = null;
+    let lastAnimTime = 0;
+    let ballTrail = [];
+
+    const canvas = document.getElementById("pitchCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // Dynamic Field Dimensions (updated on match load)
+    let fieldLength = 12.0; // Div A default (12x9) or Div B (9x6)
+    let fieldWidth = 9.0;
+    let goalWidth = 1.8;
+    let goalDepth = 0.25;
+    let penaltyDepth = 1.8;
+    let penaltyWidth = 3.6;
+    let centerRadius = 1.0;
+
+    // Scale calculation with generous margins so goalies on the line are 100% visible
+    let MARGIN_X = 55;
+    let MARGIN_Y = 40;
+    let scale = 1.0;
+
+    function recalculateScale() {
+      const availWidth = canvas.width - MARGIN_X * 2;
+      const availHeight = canvas.height - MARGIN_Y * 2;
+
+      const sx = availWidth / fieldLength;
+      const sy = availHeight / fieldWidth;
+      scale = Math.min(sx, sy);
+    }
+
+    function toCanvasX(x) {
+      return canvas.width / 2 + x * scale;
+    }
+    function toCanvasY(y) {
+      return canvas.height / 2 - y * scale;
+    }
+
+    // Initialize
+    window.addEventListener("DOMContentLoaded", () => {
+      recalculateScale();
+      refreshMatchList();
+      drawEmptyPitch();
+    });
+
+    async function refreshMatchList() {
+      try {
+        const res = await fetch("/api/matches");
+        if (!res.ok) {
+          alert("Erro ao comunicar com o servidor de partidas.");
+          return;
+        }
+        const list = await res.json();
+        const sel = document.getElementById("matchSelect");
+        const prevSelected = sel.value;
+        sel.innerHTML = "";
+
+        if (list.length === 0) {
+          sel.innerHTML = "<option>Nenhum log SSL (.log.gz) encontrado em data/raw/</option>";
+          return;
+        }
+
+        let selectIndex = 0;
+        list.forEach((m, idx) => {
+          const opt = document.createElement("option");
+          opt.value = m.path;
+          opt.textContent = `${m.name} (${m.size_mb} MB - ${m.modified})`;
+          sel.appendChild(opt);
+
+          // Restore selection if previously selected, or default to the largest real match
+          if (prevSelected && m.path === prevSelected) {
+            selectIndex = idx;
+          }
+        });
+
+        sel.selectedIndex = selectIndex;
+        loadSelectedMatch();
+      } catch (err) {
+        console.error("Erro ao listar partidas:", err);
+      }
+    }
+
+    async function loadSelectedMatch() {
+      const sel = document.getElementById("matchSelect");
+      const path = sel.value;
+      if (!path) return;
+
+      pause();
+      document.getElementById("refBadge").textContent = "Carregando partida...";
+
+      try {
+        const res = await fetch(`/api/match_data?path=${encodeURIComponent(path)}`);
+        const data = await res.json();
+
+        if (!res.ok || data.error) {
+          document.getElementById("refBadge").textContent = "Erro ao carregar";
+          alert(data.error || "Erro ao processar partida.");
+          return;
+        }
+
+        currentMatchData = data;
+        frames = currentMatchData.frames || [];
+        currentFrameIdx = 0;
+        ballTrail = [];
+
+        // Dynamic Field Dimensions from match metadata
+        const meta = currentMatchData.metadata || {};
+        fieldLength = meta.field_length || (meta.division === "A" ? 12.0 : 9.0);
+        fieldWidth = meta.field_width || (meta.division === "A" ? 9.0 : 6.0);
+        goalWidth = meta.goal_width || (meta.division === "A" ? 1.8 : 1.0);
+
+        if (fieldLength > 10.0 || meta.division === "A") {
+          penaltyDepth = 1.8;
+          penaltyWidth = 3.6;
+          centerRadius = 1.0;
+          document.getElementById("divBadge").textContent = `Divisão: A (${fieldLength.toFixed(1)}x${fieldWidth.toFixed(1)}m)`;
+          document.getElementById("divisionDetail").textContent = `Divisão A (${fieldLength.toFixed(1)}x${fieldWidth.toFixed(1)}m)`;
+        } else {
+          penaltyDepth = 1.0;
+          penaltyWidth = 2.0;
+          centerRadius = 0.5;
+          document.getElementById("divBadge").textContent = `Divisão: B (${fieldLength.toFixed(1)}x${fieldWidth.toFixed(1)}m)`;
+          document.getElementById("divisionDetail").textContent = `Divisão B (${fieldLength.toFixed(1)}x${fieldWidth.toFixed(1)}m)`;
+        }
+
+        recalculateScale();
+
+        // Update Slider
+        const slider = document.getElementById("timeSlider");
+        slider.max = Math.max(0, frames.length - 1);
+        slider.value = 0;
+
+        // Update UI Dashboard
+        updateDashboardUI();
+        renderEventFeed();
+        renderRobotTable();
+
+        drawFrame(0);
+      } catch (err) {
+        alert("Erro ao processar arquivo de partida: " + err);
+      }
+    }
+
+    function updateDashboardUI() {
+      const meta = currentMatchData.metadata;
+      const k = currentMatchData.kpis;
+
+      document.getElementById("yellowTeamName").textContent = meta.yellow_name || "Yellow Team";
+      document.getElementById("blueTeamName").textContent = meta.blue_name || "Blue Team";
+      document.getElementById("matchDuration").textContent = meta.duration_sec;
+
+      // KPIs
+      document.getElementById("posPctY").textContent = k.possession_y + "%";
+      document.getElementById("posPctB").textContent = k.possession_b + "%";
+      document.getElementById("pbY").style.width = k.possession_y + "%";
+      document.getElementById("pbB").style.width = k.possession_b + "%";
+      document.getElementById("posSecY").textContent = k.possession_y_sec + "s";
+      document.getElementById("posSecB").textContent = k.possession_b_sec + "s";
+
+      document.getElementById("passTotY").textContent = k.passes_y_total;
+      document.getElementById("passTotB").textContent = k.passes_b_total;
+      document.getElementById("passAccY").textContent = k.passes_y_acc + "%";
+      document.getElementById("passAccB").textContent = k.passes_b_acc + "%";
+      document.getElementById("passOkY").textContent = k.passes_y_ok;
+      document.getElementById("passOkB").textContent = k.passes_b_ok;
+
+      document.getElementById("shotsY").textContent = k.shots_y;
+      document.getElementById("shotsB").textContent = k.shots_b;
+      document.getElementById("xgY").textContent = k.xg_y.toFixed(2);
+      document.getElementById("xgB").textContent = k.xg_b.toFixed(2);
+
+      document.getElementById("tacklesY").textContent = k.tackles_y;
+      document.getElementById("tacklesB").textContent = k.tackles_b;
+      document.getElementById("savesY").textContent = k.saves_y;
+      document.getElementById("savesB").textContent = k.saves_b;
+      document.getElementById("prevY").textContent = k.goals_prevented_y.toFixed(2);
+      document.getElementById("prevB").textContent = k.goals_prevented_b.toFixed(2);
+
+      document.getElementById("distY").textContent = k.dist_y + " m";
+      document.getElementById("distB").textContent = k.dist_b + " m";
+      document.getElementById("spdY").textContent = k.max_spd_y + " m/s";
+      document.getElementById("spdB").textContent = k.max_spd_b + " m/s";
+    }
+
+    function renderEventFeed() {
+      const bar = document.getElementById("eventsBar");
+      bar.innerHTML = "";
+
+      const events = currentMatchData.events || [];
+      if (events.length === 0) {
+        bar.innerHTML = "<span style='font-size: 12px; color: var(--text-muted);'>Nenhum evento registrado nesta partida.</span>";
+        return;
+      }
+
+      events.forEach(e => {
+        const chip = document.createElement("div");
+        chip.className = `event-chip ${e.type}`;
+
+        let icon = "🎯";
+        if (e.type === "shot") icon = "⚽";
+        else if (e.type === "save") icon = "🧤";
+        else if (e.type === "tackle") icon = "🛡️";
+
+        chip.innerHTML = `<span>${icon}</span> <b>${formatTime(e.t)}</b> - ${e.desc}`;
+        chip.onclick = () => jumpToTime(e.t);
+        bar.appendChild(chip);
+      });
+    }
+
+    function renderRobotTable() {
+      if (!currentMatchData) return;
+      const team = document.querySelector('input[name="teamTable"]:checked').value;
+      const profiles = currentMatchData.profiles[team] || {};
+      const tbody = document.getElementById("robotTableBody");
+      tbody.innerHTML = "";
+
+      const botIds = Object.keys(profiles).sort((a,b) => parseInt(a) - parseInt(b));
+      if (botIds.length === 0) {
+        tbody.innerHTML = "<tr><td colspan='8'>Sem dados individuais de robôs.</td></tr>";
+        return;
+      }
+
+      botIds.forEach(id => {
+        const p = profiles[id];
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><b class="${team === 'yellow' ? 'badge-y' : 'badge-b'}">#${id}</b></td>
+          <td>${p.passes}</td>
+          <td>${p.pos_sec}s</td>
+          <td>${p.tackles}</td>
+          <td>${p.saves}</td>
+          <td>${p.dist} m</td>
+          <td>${p.max_spd} m/s</td>
+          <td>${p.sprints}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function jumpToTime(targetSec) {
+      if (!frames.length) return;
+      let closestIdx = 0;
+      let minDiff = 999999;
+      for (let i = 0; i < frames.length; i++) {
+        const diff = Math.abs(frames[i].t - targetSec);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestIdx = i;
+        }
+      }
+      currentFrameIdx = closestIdx;
+      document.getElementById("timeSlider").value = currentFrameIdx;
+      ballTrail = [];
+      drawFrame(currentFrameIdx);
+    }
+
+    // Playback loop
+    function togglePlay() {
+      if (isPlaying) pause();
+      else play();
+    }
+
+    function play() {
+      if (!frames.length) return;
+      isPlaying = true;
+      document.getElementById("playBtn").textContent = "⏸ Pausar";
+      lastAnimTime = performance.now();
+      animReqId = requestAnimationFrame(animationLoop);
+    }
+
+    function pause() {
+      isPlaying = false;
+      document.getElementById("playBtn").textContent = "▶ Play";
+      if (animReqId) cancelAnimationFrame(animReqId);
+    }
+
+    function setSpeed(spd, btn) {
+      playbackSpeed = spd;
+      document.querySelectorAll(".speed-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+    }
+
+    function stepFrame(deltaSeconds) {
+      if (!frames.length) return;
+      pause();
+      const targetTime = (frames[currentFrameIdx]?.t || 0) + deltaSeconds;
+      jumpToTime(Math.max(0, targetTime));
+    }
+
+    function onSliderScrub(val) {
+      currentFrameIdx = parseInt(val);
+      ballTrail = [];
+      drawFrame(currentFrameIdx);
+    }
+
+    function animationLoop(timestamp) {
+      if (!isPlaying) return;
+
+      const dt = (timestamp - lastAnimTime) / 1000.0;
+      lastAnimTime = timestamp;
+
+      // Advance frames smoothly
+      const framesToAdvance = dt * 25 * playbackSpeed;
+      currentFrameIdx += framesToAdvance;
+
+      if (currentFrameIdx >= frames.length) {
+        currentFrameIdx = frames.length - 1;
+        pause();
+      }
+
+      const idx = Math.floor(currentFrameIdx);
+      document.getElementById("timeSlider").value = idx;
+      drawFrame(idx);
+
+      if (isPlaying) {
+        animReqId = requestAnimationFrame(animationLoop);
+      }
+    }
+
+    function formatTime(sec) {
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      const ms = Math.floor((sec % 1) * 10);
+      return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${ms}`;
+    }
+
+    // Pitch Rendering
+    function drawEmptyPitch() {
+      ctx.fillStyle = "#15803d";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
+      ctx.lineWidth = 2;
+
+      const left = toCanvasX(-fieldLength / 2);
+      const right = toCanvasX(fieldLength / 2);
+      const top = toCanvasY(fieldWidth / 2);
+      const bottom = toCanvasY(-fieldWidth / 2);
+
+      // Boundary Lines (White outer field line)
+      ctx.strokeRect(left, top, right - left, bottom - top);
+
+      // Halfway Line
+      ctx.beginPath();
+      ctx.moveTo(toCanvasX(0), top);
+      ctx.lineTo(toCanvasX(0), bottom);
+      ctx.stroke();
+
+      // Center Circle
+      ctx.beginPath();
+      ctx.arc(toCanvasX(0), toCanvasY(0), centerRadius * scale, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Penalty Areas
+      // Left (Negative X)
+      ctx.strokeRect(
+        left,
+        toCanvasY(penaltyWidth / 2),
+        penaltyDepth * scale,
+        penaltyWidth * scale
+      );
+      // Right (Positive X)
+      ctx.strokeRect(
+        right - penaltyDepth * scale,
+        toCanvasY(penaltyWidth / 2),
+        penaltyDepth * scale,
+        penaltyWidth * scale
+      );
+
+      // Goal Nets (Behind the goal line)
+      ctx.strokeStyle = "#eab308"; // Left goal Yellow
+      ctx.lineWidth = 3;
+      ctx.strokeRect(left - goalDepth * scale, toCanvasY(goalWidth / 2), goalDepth * scale, goalWidth * scale);
+
+      ctx.strokeStyle = "#38bdf8"; // Right goal Blue
+      ctx.strokeRect(right, toCanvasY(goalWidth / 2), goalDepth * scale, goalWidth * scale);
+    }
+
+    function drawFrame(idx) {
+      if (!frames[idx]) return;
+      const f = frames[idx];
+
+      drawEmptyPitch();
+
+      // Update RefBox badge and Time Clock
+      document.getElementById("refBadge").textContent = `RefBox: ${f.cmd || 'NORMAL'}`;
+      const totalDur = currentMatchData?.metadata?.duration_sec || 0;
+      document.getElementById("timeDisplay").textContent = `${formatTime(f.t)} / ${formatTime(totalDur)}`;
+
+      const showTrail = document.getElementById("trailToggle").checked;
+      const showVectors = document.getElementById("velVectorToggle").checked;
+
+      // Draw Ball Trail
+      if (f.ball) {
+        if (showTrail) {
+          ballTrail.push({ x: f.ball[0], y: f.ball[1] });
+          if (ballTrail.length > 25) ballTrail.shift();
+
+          ctx.strokeStyle = "rgba(249, 115, 22, 0.4)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          for (let i = 0; i < ballTrail.length; i++) {
+            const bx = toCanvasX(ballTrail[i].x);
+            const by = toCanvasY(ballTrail[i].y);
+            if (i === 0) ctx.moveTo(bx, by);
+            else ctx.lineTo(bx, by);
+          }
+          ctx.stroke();
+        }
+      }
+
+      // Draw Robots (Yellow)
+      (f.y || []).forEach(r => {
+        drawRobot(r[0], r[1], r[2], r[3], "#eab308", "#713f12", "#000");
+      });
+
+      // Draw Robots (Blue)
+      (f.b || []).forEach(r => {
+        drawRobot(r[0], r[1], r[2], r[3], "#3b82f6", "#1e3a8a", "#fff");
+      });
+
+      // Draw Ball
+      if (f.ball) {
+        const bx = toCanvasX(f.ball[0]);
+        const by = toCanvasY(f.ball[1]);
+
+        ctx.fillStyle = "#ea580c";
+        ctx.beginPath();
+        ctx.arc(bx, by, Math.max(4, 0.04 * scale), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Speed vector
+        if (showVectors && (Math.abs(f.ball[2]) > 0.4 || Math.abs(f.ball[3]) > 0.4)) {
+          ctx.strokeStyle = "#f97316";
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.moveTo(bx, by);
+          ctx.lineTo(bx + f.ball[2] * scale * 0.2, by - f.ball[3] * scale * 0.2);
+          ctx.stroke();
+        }
+      }
+    }
+
+    function drawRobot(id, x, y, theta, bodyColor, borderColor, textColor) {
+      const cx = toCanvasX(x);
+      const cy = toCanvasY(y);
+      const radius = 0.09 * scale; // 9 cm radius
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(-theta); // Canvas Y is inverted
+
+      // Body Circle
+      ctx.fillStyle = bodyColor;
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Heading Indicator (Flat front kicker & orientation arrow)
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(radius * 0.8, -radius * 0.5);
+      ctx.lineTo(radius * 0.8, radius * 0.5);
+      ctx.stroke();
+
+      // Direction Nose / Triangle
+      ctx.fillStyle = borderColor;
+      ctx.beginPath();
+      ctx.moveTo(radius * 1.15, 0);
+      ctx.lineTo(radius * 0.75, -radius * 0.3);
+      ctx.lineTo(radius * 0.75, radius * 0.3);
+      ctx.closePath();
+      ctx.fill();
+
+      // ID Text
+      ctx.rotate(theta); // Rotate back for upright text
+      ctx.fillStyle = textColor;
+      const fontSize = Math.max(9, Math.round(radius * 0.85));
+      ctx.font = `bold ${fontSize}px monospace`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(id), 0, 0);
+
+      ctx.restore();
+    }
+  </script>
+</body>
+</html>

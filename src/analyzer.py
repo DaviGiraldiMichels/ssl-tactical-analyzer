@@ -7,6 +7,8 @@ Log Ingestion -> Proto Decoding -> Data Cleaning -> Tactical Metrics Engine -> V
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from src.metrics.defense import DefenseAnalyzer
+from src.metrics.kinematics import KinematicsAnalyzer
 from src.metrics.passing import PassAnalyzer
 from src.metrics.pitch_control import PitchControlAnalyzer, SpatialSnapshotMetrics
 from src.metrics.possession import PossessionAnalyzer
@@ -45,6 +47,11 @@ class SSLMatchAnalyzer:
             field_length_meters=self.field_length,
             goal_width_meters=self.goal_width,
         )
+        self.defense_analyzer = DefenseAnalyzer(
+            field_length_meters=self.field_length,
+            goal_width_meters=self.goal_width,
+        )
+        self.kinematics_analyzer = KinematicsAnalyzer()
 
         self.pitch_viz = SSLPitchVisualizer(division=division)
 
@@ -65,7 +72,20 @@ class SSLMatchAnalyzer:
             if decoded is None:
                 continue
 
-            if isinstance(decoded, RefereeState):
+            if isinstance(decoded, FieldGeometry):
+                self.field_length = decoded.field_length / 1000.0
+                self.field_width = decoded.field_width / 1000.0
+                self.goal_width = decoded.goal_width / 1000.0
+                self.division = "A" if self.field_length > 10.0 else "B"
+                self.possession_analyzer.field_length = self.field_length
+                self.pitch_control_analyzer.length = self.field_length
+                self.pitch_control_analyzer.width = self.field_width
+                self.xg_analyzer.field_length = self.field_length
+                self.xg_analyzer.goal_width = self.goal_width
+                self.defense_analyzer.field_length = self.field_length
+                self.defense_analyzer.goal_width = self.goal_width
+
+            elif isinstance(decoded, RefereeState):
                 self.cleaner.update_referee(decoded)
                 if decoded.yellow.name:
                     self.yellow_team_name = decoded.yellow.name
@@ -84,10 +104,32 @@ class SSLMatchAnalyzer:
 
     def _process_snapshot(self, snapshot: MatchSnapshot, idx: int):
         self.snapshots.append(snapshot)
+
+        # 1. Possession & Passing
         self.possession_analyzer.process_snapshot(snapshot)
         self.pass_analyzer.process_snapshot(snapshot)
+
+        # 2. Shots and xG
+        prev_y_shots = len(self.xg_analyzer.yellow_stats.shots)
+        prev_b_shots = len(self.xg_analyzer.blue_stats.shots)
         self.xg_analyzer.process_snapshot(snapshot)
 
+        # Notify DefenseAnalyzer if a new shot occurred
+        if len(self.xg_analyzer.yellow_stats.shots) > prev_y_shots:
+            shot = self.xg_analyzer.yellow_stats.shots[-1]
+            self.defense_analyzer.register_incoming_shot("yellow", shot.xg, shot.timestamp)
+        elif len(self.xg_analyzer.blue_stats.shots) > prev_b_shots:
+            shot = self.xg_analyzer.blue_stats.shots[-1]
+            self.defense_analyzer.register_incoming_shot("blue", shot.xg, shot.timestamp)
+
+        # 3. Defensive Actions (Tackles, Recoveries, Goalkeeper Saves)
+        current_team, current_bot = self.possession_analyzer.evaluate_frame(snapshot)
+        self.defense_analyzer.process_snapshot(snapshot, current_team, current_bot)
+
+        # 4. Kinematics (Distance, Speeds, Sprints)
+        self.kinematics_analyzer.process_snapshot(snapshot)
+
+        # 5. Spatial Pitch Control
         if idx % self.sample_pitch_control_interval == 0:
             spatial_metric = self.pitch_control_analyzer.process_snapshot(snapshot)
             self.spatial_history.append(spatial_metric)
@@ -100,6 +142,10 @@ class SSLMatchAnalyzer:
             blue_passing=self.pass_analyzer.blue_stats,
             yellow_shots=self.xg_analyzer.yellow_stats,
             blue_shots=self.xg_analyzer.blue_stats,
+            yellow_defense=self.defense_analyzer.yellow_stats,
+            blue_defense=self.defense_analyzer.blue_stats,
+            yellow_kinematics=self.kinematics_analyzer.yellow_stats,
+            blue_kinematics=self.kinematics_analyzer.blue_stats,
             spatial_history=self.spatial_history,
             yellow_team_name=self.yellow_team_name,
             blue_team_name=self.blue_team_name,

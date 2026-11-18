@@ -1,11 +1,15 @@
 """
 Match Analytics Report Generator for RoboCup SSL.
-Generates comprehensive terminal summaries and standalone HTML dashboards.
+Generates comprehensive terminal summaries and standalone HTML dashboards
+including possession, passing networks, xG, defensive actions, goalkeeper saves,
+and robot kinematics (workload, peak speed).
 """
 
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from src.metrics.defense import DefensiveStats
+from src.metrics.kinematics import TeamKinematicsStats
 from src.metrics.passing import PassingStats
 from src.metrics.pitch_control import SpatialSnapshotMetrics
 from src.metrics.possession import PossessionStats
@@ -22,6 +26,10 @@ class TacticalReportGenerator:
         blue_passing: PassingStats,
         yellow_shots: ShotStats,
         blue_shots: ShotStats,
+        yellow_defense: Optional[DefensiveStats] = None,
+        blue_defense: Optional[DefensiveStats] = None,
+        yellow_kinematics: Optional[TeamKinematicsStats] = None,
+        blue_kinematics: Optional[TeamKinematicsStats] = None,
         spatial_history: Optional[List[SpatialSnapshotMetrics]] = None,
         yellow_team_name: str = "Yellow Team",
         blue_team_name: str = "Blue Team",
@@ -31,6 +39,10 @@ class TacticalReportGenerator:
         self.bp = blue_passing
         self.ys = yellow_shots
         self.bs = blue_shots
+        self.yd = yellow_defense or DefensiveStats()
+        self.bd = blue_defense or DefensiveStats()
+        self.yk = yellow_kinematics or TeamKinematicsStats()
+        self.bk = blue_kinematics or TeamKinematicsStats()
         self.spatial = spatial_history or []
         self.yellow_name = yellow_team_name
         self.blue_name = blue_team_name
@@ -60,6 +72,14 @@ class TacticalReportGenerator:
             "-" * 70,
             f"{'Finalizações (Chutes)':<35} | {self.ys.total_shots:>15} | {self.bs.total_shots:>15}",
             f"{'Expected Goals (xG Total)':<35} | {self.ys.total_xg:>15.2f} | {self.bs.total_xg:>15.2f}",
+            "-" * 70,
+            f"{'Roubos de Bola (Desarmes)':<35} | {self.yd.tackles_won:>15} | {self.bd.tackles_won:>15}",
+            f"{'Recuperações de Bola Solta':<35} | {self.yd.recoveries:>15} | {self.bd.recoveries:>15}",
+            f"{'Defesas do Goleiro':<35} | {self.yd.goalkeeper_saves:>15} | {self.bd.goalkeeper_saves:>15}",
+            f"{'Gols Evitados (xG Defendido)':<35} | {self.yd.goals_prevented_xg:>15.2f} | {self.bd.goals_prevented_xg:>15.2f}",
+            "-" * 70,
+            f"{'Distância Total Percorrida':<35} | {self.yk.total_team_distance_m:>13.1f}m | {self.bk.total_team_distance_m:>13.1f}m",
+            f"{'Velocidade Máxima de Pico':<35} | {self.yk.max_team_speed_ms:>11.2f} m/s | {self.bk.max_team_speed_ms:>11.2f} m/s",
             "=" * 70,
         ]
 
@@ -101,7 +121,7 @@ class TacticalReportGenerator:
       padding: 24px;
     }}
     .container {{
-      max-width: 1100px;
+      max-width: 1200px;
       margin: 0 auto;
     }}
     header {{
@@ -121,7 +141,7 @@ class TacticalReportGenerator:
     }}
     .grid {{
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
       gap: 20px;
       margin-bottom: 28px;
     }}
@@ -290,37 +310,92 @@ class TacticalReportGenerator:
           <span>{avg_y_ctrl:.1f}% Y / {avg_b_ctrl:.1f}% B</span>
         </div>
       </div>
+
+      <!-- Ações Defensivas e Goleiro -->
+      <div class="card">
+        <h2>Ações Defensivas & Goleiro</h2>
+        <div class="stat-row">
+          <span>Roubos de Bola (Desarmes)</span>
+          <span><b class="badge-y">{self.yd.tackles_won}</b> Y vs <b class="badge-b">{self.bd.tackles_won}</b> B</span>
+        </div>
+        <div class="stat-row">
+          <span>Recuperações de Bola Solta</span>
+          <span><b class="badge-y">{self.yd.recoveries}</b> Y vs <b class="badge-b">{self.bd.recoveries}</b> B</span>
+        </div>
+        <div class="stat-row">
+          <span>Defesas do Goleiro</span>
+          <span><b class="badge-y">{self.yd.goalkeeper_saves}</b> Y vs <b class="badge-b">{self.bd.goalkeeper_saves}</b> B</span>
+        </div>
+        <div class="stat-row">
+          <span>Gols Evitados (xG Defendido)</span>
+          <span><b class="badge-y">{self.yd.goals_prevented_xg:.2f}</b> Y vs <b class="badge-b">{self.bd.goals_prevented_xg:.2f}</b> B</span>
+        </div>
+      </div>
+
+      <!-- Desempenho Físico e Cinemática -->
+      <div class="card">
+        <h2>Cinemática & Trabalho Físico</h2>
+        <div class="stat-row">
+          <span>Distância Total Percorrida</span>
+          <span><b class="badge-y">{self.yk.total_team_distance_m:.1f} m</b> Y vs <b class="badge-b">{self.bk.total_team_distance_m:.1f} m</b> B</span>
+        </div>
+        <div class="stat-row">
+          <span>Velocidade Máxima de Pico</span>
+          <span><b class="badge-y">{self.yk.max_team_speed_ms:.2f} m/s</b> Y vs <b class="badge-b">{self.bk.max_team_speed_ms:.2f} m/s</b> B</span>
+        </div>
+      </div>
     </div>
 
-    <!-- Tabela de Passes por Robô -->
+    <!-- Tabela de Desempenho Completo por Robô (Amarelo) -->
     <div class="card">
-      <h2>Volume de Passes e Recompensas por Robô (Amarelo)</h2>
+      <h2>Desempenho Individual dos Robôs ({self.yellow_name})</h2>
       <table>
         <thead>
           <tr>
-            <th>ID do Robô</th>
-            <th>Passes Executados</th>
-            <th>Recepções Concluídas</th>
-            <th>Tempo em Posse (s)</th>
+            <th>ID</th>
+            <th>Passes Dados</th>
+            <th>Recepções</th>
+            <th>Posse (s)</th>
+            <th>Desarmes (Roubos)</th>
+            <th>Defesas</th>
+            <th>Distância (m)</th>
+            <th>Velocidade Máx (m/s)</th>
+            <th>Sprints</th>
           </tr>
         </thead>
         <tbody>
 """
         yellow_bot_ids = sorted(
-            set(list(self.yp.passes_by_robot.keys()) + list(self.possession.robot_possession_sec["yellow"].keys()))
+            set(
+                list(self.yp.passes_by_robot.keys())
+                + list(self.possession.robot_possession_sec["yellow"].keys())
+                + list(self.yk.profiles.keys())
+            )
         )
         if not yellow_bot_ids:
-            html += "<tr><td colspan='4'>Nenhum dado registrado para esta equipe.</td></tr>"
+            html += "<tr><td colspan='9'>Nenhum dado registrado para esta equipe.</td></tr>"
         for b_id in yellow_bot_ids:
             passes = self.yp.passes_by_robot.get(b_id, 0)
             receptions = self.yp.receptions_by_robot.get(b_id, 0)
             pos_sec = self.possession.robot_possession_sec["yellow"].get(b_id, 0.0)
+            tackles = self.yd.tackles_by_robot.get(b_id, 0)
+            saves = self.yd.saves_by_robot.get(b_id, 0)
+            prof = self.yk.profiles.get(b_id)
+            dist_m = prof.total_distance_m if prof else 0.0
+            max_spd = prof.max_speed_ms if prof else 0.0
+            sprints = prof.sprints_count if prof else 0
+
             html += f"""
           <tr>
-            <td><b>Robô #{b_id}</b></td>
+            <td><b class="badge-y">#{b_id}</b></td>
             <td>{passes}</td>
             <td>{receptions}</td>
             <td>{pos_sec:.2f} s</td>
+            <td>{tackles}</td>
+            <td>{saves}</td>
+            <td>{dist_m:.1f} m</td>
+            <td>{max_spd:.2f} m/s</td>
+            <td>{sprints}</td>
           </tr>
 """
 

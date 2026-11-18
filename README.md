@@ -85,7 +85,20 @@ python3 -m src.recorder --output data/raw/minha_partida.log.gz
 ```
 O gravador mostrará o status em tempo real (tempo decorrido, taxa de quadros/fps da visão e mensagens do juiz). Ao terminar a partida, basta pressionar **Ctrl + C** e o arquivo estará pronto para ser analisado.
 
-### 4. Executar a Análise Tática via CLI
+### 4. Dashboard Web Interativo e Player 2D da Partida
+Para abrir o painel visual interativo com reprodução 2D do campo em tempo real:
+```bash
+python3 -m src.web.server
+```
+Em seguida, abra o navegador em: **`http://localhost:8080`**
+
+Recursos do Dashboard Web:
+* **Seletor de Partidas:** Carrega qualquer arquivo `.log.gz` salvo em `data/raw/` automaticamente.
+* **Player 2D do Campo:** Play/Pause, controle de velocidade (0.5x, 1x, 2x, 4x), barra de timeline (*slider*) e rastro dos robôs e da bola.
+* **Timeline de Eventos Interativa:** Pílulas com chutes (xG), defesas do goleiro, passes e desarmes; clicando em qualquer evento o replay salta direto para aquele lance!
+* **Ficha dos Atletas-Robôs:** Tabela com métricas físicas e técnicas por robô individual.
+
+### 5. Executar a Análise Tática via CLI
 ```bash
 python3 -m src.cli --log data/sample_matches/synthetic_match.log.gz --output-dir output/
 ```

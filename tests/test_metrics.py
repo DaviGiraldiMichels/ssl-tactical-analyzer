@@ -1,4 +1,6 @@
 import unittest
+from src.metrics.defense import DefenseAnalyzer
+from src.metrics.kinematics import KinematicsAnalyzer
 from src.metrics.passing import PassAnalyzer
 from src.metrics.pitch_control import PitchControlAnalyzer
 from src.metrics.possession import PossessionAnalyzer
@@ -77,6 +79,66 @@ class TestSSLMetrics(unittest.TestCase):
             defenders={0: RobotState(0, "blue", 4.0, 0.0, 3.14)},
         )
         self.assertLess(xg_far, xg_close)
+
+    def test_defense_tackle_and_save(self):
+        analyzer = DefenseAnalyzer(field_length_meters=9.0, goal_width_meters=1.0)
+
+        # 1. Test Tackle: Yellow 0 has ball, Blue 1 takes it away
+        snap1 = MatchSnapshot(
+            timestamp_sec=1.0,
+            ball=BallState(x=0.0, y=0.0, vx=0.1, vy=0.0),
+            robots_yellow={0: RobotState(0, "yellow", -0.09, 0.0, 0.0)},
+            robots_blue={1: RobotState(1, "blue", 0.5, 0.0, 3.14)},
+        )
+        analyzer.process_snapshot(snap1, "yellow", 0)
+
+        # Blue 1 strips ball
+        snap2 = MatchSnapshot(
+            timestamp_sec=1.05,
+            ball=BallState(x=0.0, y=0.0, vx=0.0, vy=0.0),
+            robots_yellow={0: RobotState(0, "yellow", -0.3, 0.0, 0.0)},
+            robots_blue={1: RobotState(1, "blue", 0.09, 0.0, 3.14)},
+        )
+        analyzer.process_snapshot(snap2, "blue", 1)
+
+        self.assertEqual(analyzer.blue_stats.tackles_won, 1)
+        self.assertEqual(analyzer.blue_stats.tackles_by_robot[1], 1)
+
+        # 2. Test Goalkeeper Save: Shot incoming on Blue's goal (in +X)
+        analyzer.register_incoming_shot(shooter_team="yellow", xg=0.65, timestamp=2.0)
+
+        # Blue goalie #0 in box (x=4.3, y=0.0) stops ball
+        snap_save = MatchSnapshot(
+            timestamp_sec=2.2,
+            ball=BallState(x=4.25, y=0.0, vx=0.1, vy=0.0),
+            robots_blue={0: RobotState(0, "blue", 4.3, 0.0, 3.14)},
+        )
+        analyzer.process_snapshot(snap_save, "blue", 0)
+
+        self.assertEqual(analyzer.blue_stats.goalkeeper_saves, 1)
+        self.assertAlmostEqual(analyzer.blue_stats.goals_prevented_xg, 0.65)
+
+    def test_kinematics(self):
+        analyzer = KinematicsAnalyzer(sprint_speed_threshold=2.0)
+
+        # Frame 1: Robot 0 at (0, 0)
+        snap1 = MatchSnapshot(
+            timestamp_sec=0.0,
+            robots_yellow={0: RobotState(0, "yellow", 0.0, 0.0, 0.0, vx=0.0, vy=0.0)},
+        )
+        analyzer.process_snapshot(snap1)
+
+        # Frame 2: Robot 0 moves to (0.1, 0) with speed 2.5 m/s
+        snap2 = MatchSnapshot(
+            timestamp_sec=0.04,
+            robots_yellow={0: RobotState(0, "yellow", 0.1, 0.0, 0.0, vx=2.5, vy=0.0)},
+        )
+        analyzer.process_snapshot(snap2)
+
+        prof = analyzer.yellow_stats.profiles[0]
+        self.assertAlmostEqual(prof.total_distance_m, 0.1, delta=0.01)
+        self.assertEqual(prof.max_speed_ms, 2.5)
+        self.assertEqual(prof.sprints_count, 1)
 
 
 if __name__ == "__main__":

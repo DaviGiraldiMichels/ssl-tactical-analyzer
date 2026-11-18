@@ -26,12 +26,20 @@ venv/
 .venv/
 ENV/
 
-# Output files
+# Output directories & generated reports
 output/
-*.png
-*.html
+*.log
 
-# Pytest / coverage
+# Personal files & image artifacts
+PlanoDeTrabalho.png
+
+# Raw match data (keep folder via .gitkeep, but ignore heavy match dumps)
+data/raw/*
+!data/raw/.gitkeep
+
+# Pytest / coverage / IDEs
 .pytest_cache/
 .coverage
 htmlcov/
+.vscode/
+.idea/
