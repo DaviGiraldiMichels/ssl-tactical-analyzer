@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from src.metrics.defense import DefenseAnalyzer
+from src.metrics.formations import TacticalFormationsAnalyzer
 from src.metrics.heatmap import SpatialHeatmapAnalyzer
 from src.metrics.kinematics import KinematicsAnalyzer
 from src.metrics.passing import PassAnalyzer
@@ -57,6 +58,10 @@ class SSLMatchAnalyzer:
             field_length=self.field_length,
             field_width=self.field_width,
         )
+        self.formations_analyzer = TacticalFormationsAnalyzer(
+            field_length=self.field_length,
+            field_width=self.field_width,
+        )
 
         self.pitch_viz = SSLPitchVisualizer(division=division)
 
@@ -90,6 +95,8 @@ class SSLMatchAnalyzer:
                 self.defense_analyzer.field_length = self.field_length
                 self.defense_analyzer.goal_width = self.goal_width
                 self.heatmap_analyzer.update_dimensions(self.field_length, self.field_width)
+                self.formations_analyzer.field_length = self.field_length
+                self.formations_analyzer.field_width = self.field_width
 
             elif isinstance(decoded, RefereeState):
                 self.cleaner.update_referee(decoded)
@@ -142,6 +149,9 @@ class SSLMatchAnalyzer:
 
         # 6. Spatial Heatmaps
         self.heatmap_analyzer.process_snapshot(snapshot)
+
+        # 7. Tactical Formations & Team Geometry
+        self.formations_analyzer.process_snapshot(snapshot)
 
     def generate_report(self, output_html_path: Optional[str] = None) -> str:
         """Returns terminal report text and optionally generates an HTML report."""

@@ -478,6 +478,11 @@
               <option value="blue">Time Azul</option>
             </select>
 
+            <!-- Formations & Convex Hull Toggle -->
+            <label style="font-size: 12px; color: #c084fc; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px; margin-left: 8px;">
+              <input type="checkbox" id="formationToggle" onchange="drawFrame(currentFrameIdx)"> 📐 Bloco & Formação
+            </label>
+
             <label style="font-size: 12px; color: var(--text-muted); cursor: pointer; margin-left: 8px;">
               <input type="checkbox" id="trailToggle" checked> Rastro
             </label>
@@ -623,6 +628,31 @@
           <div class="kpi-stat-row">
             <span>Velocidade Máxima de Pico:</span>
             <span><b class="badge-y" id="spdY">0.00 m/s</b> vs <b class="badge-b" id="spdB">0.00 m/s</b></span>
+          </div>
+        </div>
+
+        <!-- Geometria & Compactação do Bloco (Convex Hull) -->
+        <div class="kpi-card" style="grid-column: span 2;">
+          <h3>Geometria & Compactação do Bloco (Convex Hull)</h3>
+          <div class="kpi-stat-row">
+            <span>Área Média do Bloco:</span>
+            <span><b class="badge-y" id="areaY">0.0 m²</b> vs <b class="badge-b" id="areaB">0.0 m²</b></span>
+          </div>
+          <div class="kpi-stat-row">
+            <span>Largura Média (Width):</span>
+            <span><b class="badge-y" id="widthY">0.0 m</b> vs <b class="badge-b" id="widthB">0.0 m</b></span>
+          </div>
+          <div class="kpi-stat-row">
+            <span>Profundidade Média (Depth):</span>
+            <span><b class="badge-y" id="lenY">0.0 m</b> vs <b class="badge-b" id="lenB">0.0 m</b></span>
+          </div>
+          <div class="kpi-stat-row">
+            <span>Índice de Espalhamento (Stretch):</span>
+            <span><b class="badge-y" id="stretchY">0.0 m</b> vs <b class="badge-b" id="stretchB">0.0 m</b></span>
+          </div>
+          <div class="kpi-stat-row" style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+            <span>Centroide Médio: <span id="centroidY">(0.0, 0.0)</span></span>
+            <span>Centroide Médio: <span id="centroidB">(0.0, 0.0)</span></span>
           </div>
         </div>
       </div>
@@ -847,6 +877,21 @@
       document.getElementById("distB").textContent = k.dist_b + " m";
       document.getElementById("spdY").textContent = k.max_spd_y + " m/s";
       document.getElementById("spdB").textContent = k.max_spd_b + " m/s";
+
+      // Formations & Convex Hull KPIs
+      const fm = currentMatchData.formations;
+      if (fm) {
+        document.getElementById("areaY").textContent = fm.yellow.avg_area_m2 + " m²";
+        document.getElementById("areaB").textContent = fm.blue.avg_area_m2 + " m²";
+        document.getElementById("widthY").textContent = fm.yellow.avg_width_m + " m";
+        document.getElementById("widthB").textContent = fm.blue.avg_width_m + " m";
+        document.getElementById("lenY").textContent = fm.yellow.avg_length_m + " m";
+        document.getElementById("lenB").textContent = fm.blue.avg_length_m + " m";
+        document.getElementById("stretchY").textContent = fm.yellow.avg_stretch_index_m + " m";
+        document.getElementById("stretchB").textContent = fm.blue.avg_stretch_index_m + " m";
+        document.getElementById("centroidY").textContent = `(${fm.yellow.avg_centroid[0]}, ${fm.yellow.avg_centroid[1]})`;
+        document.getElementById("centroidB").textContent = `(${fm.blue.avg_centroid[0]}, ${fm.blue.avg_centroid[1]})`;
+      }
     }
 
     // Vertical Event Feed Logic
@@ -1365,6 +1410,123 @@
       });
     }
 
+    // ==========================================
+    // Tactical Formations & Convex Hull Overlay
+    // ==========================================
+    function jsConvexHull(points) {
+      if (points.length <= 2) return points;
+      const sorted = points.slice().sort((a, b) => a[0] === b[0] ? a[1] - b[1] : a[0] - b[0]);
+      const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+      const lower = [];
+      for (const p of sorted) {
+        while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
+          lower.pop();
+        }
+        lower.push(p);
+      }
+      const upper = [];
+      for (let i = sorted.length - 1; i >= 0; i--) {
+        const p = sorted[i];
+        while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
+          upper.pop();
+        }
+        upper.push(p);
+      }
+      lower.pop();
+      upper.pop();
+      return lower.concat(upper);
+    }
+
+    function jsPolygonArea(hull) {
+      let a = 0;
+      for (let i = 0; i < hull.length; i++) {
+        const j = (i + 1) % hull.length;
+        a += hull[i][0] * hull[j][1] - hull[j][0] * hull[i][1];
+      }
+      return Math.abs(a) / 2.0;
+    }
+
+    function drawFormationsOverlay(f) {
+      if (!document.getElementById("formationToggle")?.checked) return;
+
+      // Draw Yellow Team Shape
+      drawSingleTeamShape(f.y || [], "yellow", "rgba(234, 179, 8, 0.16)", "rgba(234, 179, 8, 0.85)", "#eab308");
+
+      // Draw Blue Team Shape
+      drawSingleTeamShape(f.b || [], "blue", "rgba(59, 130, 246, 0.16)", "rgba(59, 130, 246, 0.85)", "#38bdf8");
+    }
+
+    function drawSingleTeamShape(bots, teamName, fillStyle, strokeStyle, badgeColor) {
+      if (bots.length < 3) return;
+
+      const pts = bots.map(b => [b[1], b[2]]);
+      const hull = jsConvexHull(pts);
+      const area = jsPolygonArea(hull);
+
+      const xs = pts.map(p => p[0]);
+      const ys = pts.map(p => p[1]);
+      const cx = xs.reduce((a, b) => a + b, 0) / xs.length;
+      const cy = ys.reduce((a, b) => a + b, 0) / ys.length;
+
+      // 1. Draw Convex Hull Polygon
+      ctx.save();
+      ctx.fillStyle = fillStyle;
+      ctx.strokeStyle = strokeStyle;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
+
+      ctx.beginPath();
+      for (let i = 0; i < hull.length; i++) {
+        const hx = toCanvasX(hull[i][0]);
+        const hy = toCanvasY(hull[i][1]);
+        if (i === 0) ctx.moveTo(hx, hy);
+        else ctx.lineTo(hx, hy);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+
+      // 2. Draw Team Centroid Crosshair
+      const canvasCx = toCanvasX(cx);
+      const canvasCy = toCanvasY(cy);
+
+      ctx.save();
+      ctx.strokeStyle = badgeColor;
+      ctx.lineWidth = 2;
+
+      ctx.beginPath();
+      ctx.arc(canvasCx, canvasCy, 6, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(canvasCx - 9, canvasCy);
+      ctx.lineTo(canvasCx + 9, canvasCy);
+      ctx.moveTo(canvasCx, canvasCy - 9);
+      ctx.lineTo(canvasCx, canvasCy + 9);
+      ctx.stroke();
+
+      // Badge tag: Area and Width
+      const width = Math.max(...ys) - Math.min(...ys);
+      const length = Math.max(...xs) - Math.min(...xs);
+
+      const tagText = `${teamName === 'yellow' ? '🟡' : '🔵'} ${area.toFixed(1)} m² (L:${width.toFixed(1)}m P:${length.toFixed(1)}m)`;
+      ctx.font = "bold 9px monospace";
+      const tw = ctx.measureText(tagText).width;
+
+      ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
+      ctx.fillRect(canvasCx - tw / 2 - 4, canvasCy + 9, tw + 8, 15);
+      ctx.strokeStyle = badgeColor;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(canvasCx - tw / 2 - 4, canvasCy + 9, tw + 8, 15);
+
+      ctx.fillStyle = "#fff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(tagText, canvasCx, canvasCy + 16);
+      ctx.restore();
+    }
+
     function drawFrame(idx) {
       if (!frames[idx]) return;
       const f = frames[idx];
@@ -1376,6 +1538,12 @@
       if (showHeatmap) {
         drawHeatmapOverlay();
         drawPitchLinesOnly();
+      }
+
+      // Check if Formations & Convex Hull is enabled
+      const showFormation = document.getElementById("formationToggle")?.checked;
+      if (showFormation) {
+        drawFormationsOverlay(f);
       }
 
       // Check if Pass Network Overlay is enabled

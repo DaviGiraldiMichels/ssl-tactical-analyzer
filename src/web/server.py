@@ -267,6 +267,7 @@ class MatchCache:
             "profiles": {"yellow": y_profiles, "blue": b_profiles},
             "pass_network": {"yellow": y_pass_network, "blue": b_pass_network},
             "heatmaps": analyzer.heatmap_analyzer.export_all_heatmaps(),
+            "formations": analyzer.formations_analyzer.export_summary(),
             "frames": web_frames,
         }
 
