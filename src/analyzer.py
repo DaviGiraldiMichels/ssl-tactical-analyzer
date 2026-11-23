@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from src.metrics.defense import DefenseAnalyzer
+from src.metrics.heatmap import SpatialHeatmapAnalyzer
 from src.metrics.kinematics import KinematicsAnalyzer
 from src.metrics.passing import PassAnalyzer
 from src.metrics.pitch_control import PitchControlAnalyzer, SpatialSnapshotMetrics
@@ -52,6 +53,10 @@ class SSLMatchAnalyzer:
             goal_width_meters=self.goal_width,
         )
         self.kinematics_analyzer = KinematicsAnalyzer()
+        self.heatmap_analyzer = SpatialHeatmapAnalyzer(
+            field_length=self.field_length,
+            field_width=self.field_width,
+        )
 
         self.pitch_viz = SSLPitchVisualizer(division=division)
 
@@ -84,6 +89,7 @@ class SSLMatchAnalyzer:
                 self.xg_analyzer.goal_width = self.goal_width
                 self.defense_analyzer.field_length = self.field_length
                 self.defense_analyzer.goal_width = self.goal_width
+                self.heatmap_analyzer.update_dimensions(self.field_length, self.field_width)
 
             elif isinstance(decoded, RefereeState):
                 self.cleaner.update_referee(decoded)
@@ -133,6 +139,9 @@ class SSLMatchAnalyzer:
         if idx % self.sample_pitch_control_interval == 0:
             spatial_metric = self.pitch_control_analyzer.process_snapshot(snapshot)
             self.spatial_history.append(spatial_metric)
+
+        # 6. Spatial Heatmaps
+        self.heatmap_analyzer.process_snapshot(snapshot)
 
     def generate_report(self, output_html_path: Optional[str] = None) -> str:
         """Returns terminal report text and optionally generates an HTML report."""

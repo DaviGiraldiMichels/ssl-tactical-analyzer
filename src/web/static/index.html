@@ -486,6 +486,32 @@
             </label>
           </div>
         </div>
+
+        <!-- Heatmap Overlay Row -->
+        <div class="buttons-row" style="margin-top: 4px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08);">
+          <div class="btn-group" style="align-items: center; gap: 8px;">
+            <label style="font-size: 12px; color: #f97316; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+              <input type="checkbox" id="heatmapToggle" onchange="onHeatmapToggleChange()"> 🔥 Mapa de Calor
+            </label>
+            <select id="heatmapTarget" onchange="onHeatmapTargetChange()" style="padding: 2px 6px; font-size: 11px; max-width: 170px;">
+              <option value="ball">⚽ Bola</option>
+              <option value="yellow">🟡 Time Amarelo (Geral)</option>
+              <option value="blue">🔵 Time Azul (Geral)</option>
+              <optgroup label="Robôs Amarelos" id="optgroupYellowBots"></optgroup>
+              <optgroup label="Robôs Azuis" id="optgroupBlueBots"></optgroup>
+            </select>
+            <span style="font-size: 11px; color: var(--text-muted);">Opacidade:</span>
+            <input type="range" id="heatmapOpacity" min="0.1" max="1.0" step="0.05" value="0.75" style="width: 55px; height: 4px;" oninput="drawFrame(currentFrameIdx)" title="Opacidade da camada de calor">
+            <span style="font-size: 11px; color: var(--text-muted); margin-left: 2px;">Realce:</span>
+            <input type="range" id="heatmapSensitivity" min="0.5" max="2.2" step="0.1" value="1.0" style="width: 55px; height: 4px;" oninput="onHeatmapSensitivityChange()" title="Sensibilidade de realce das áreas de menor frequência">
+          </div>
+
+          <div class="btn-group" style="font-size: 11px; color: var(--text-muted); align-items: center; gap: 4px;">
+            <span>Frio</span>
+            <span style="display: inline-block; width: 45px; height: 7px; border-radius: 4px; background: linear-gradient(to right, #00f, #0ff, #0f0, #ff0, #f00);"></span>
+            <span>Quente</span>
+          </div>
+        </div>
       </div>
 
       <!-- Vertical Events Feed Panel -->
@@ -773,6 +799,8 @@
         updateDashboardUI();
         renderVerticalEvents();
         renderRobotTable();
+        cachedHeatmapTarget = null;
+        updateHeatmapSelectOptions();
 
         drawFrame(0);
       } catch (err) {
@@ -1056,6 +1084,206 @@
       ctx.strokeRect(right, toCanvasY(goalWidth / 2), goalDepth * scale, goalWidth * scale);
     }
 
+    // Re-stroke field lines on top of heatmap so markings stay sharp
+    function drawPitchLinesOnly() {
+      ctx.save();
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
+      ctx.lineWidth = 2;
+
+      const left = toCanvasX(-fieldLength / 2);
+      const right = toCanvasX(fieldLength / 2);
+      const top = toCanvasY(fieldWidth / 2);
+      const bottom = toCanvasY(-fieldWidth / 2);
+
+      ctx.strokeRect(left, top, right - left, bottom - top);
+
+      ctx.beginPath();
+      ctx.moveTo(toCanvasX(0), top);
+      ctx.lineTo(toCanvasX(0), bottom);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(toCanvasX(0), toCanvasY(0), centerRadius * scale, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeRect(left, toCanvasY(penaltyWidth / 2), penaltyDepth * scale, penaltyWidth * scale);
+      ctx.strokeRect(right - penaltyDepth * scale, toCanvasY(penaltyWidth / 2), penaltyDepth * scale, penaltyWidth * scale);
+
+      ctx.strokeStyle = "#eab308";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(left - goalDepth * scale, toCanvasY(goalWidth / 2), goalDepth * scale, goalWidth * scale);
+
+      ctx.strokeStyle = "#38bdf8";
+      ctx.strokeRect(right, toCanvasY(goalWidth / 2), goalDepth * scale, goalWidth * scale);
+      ctx.restore();
+    }
+
+    // ==========================================
+    // Spatial Heatmap Overlay Renderer
+    // ==========================================
+    let heatmapOffscreenCanvas = null;
+    let cachedHeatmapTarget = null;
+
+    function onHeatmapToggleChange() {
+      drawFrame(currentFrameIdx);
+    }
+
+    function onHeatmapTargetChange() {
+      cachedHeatmapTarget = null;
+      drawFrame(currentFrameIdx);
+    }
+
+    function onHeatmapSensitivityChange() {
+      cachedHeatmapTarget = null;
+      drawFrame(currentFrameIdx);
+    }
+
+    function updateHeatmapSelectOptions() {
+      const yOpt = document.getElementById("optgroupYellowBots");
+      const bOpt = document.getElementById("optgroupBlueBots");
+      if (!yOpt || !bOpt) return;
+
+      yOpt.innerHTML = "";
+      bOpt.innerHTML = "";
+
+      const hm = currentMatchData?.heatmaps;
+      if (!hm) return;
+
+      if (hm.yellow_robots) {
+        Object.keys(hm.yellow_robots).sort((a,b) => parseInt(a) - parseInt(b)).forEach(id => {
+          const opt = document.createElement("option");
+          opt.value = `yellow_robot:${id}`;
+          opt.textContent = `🟡 Amarelo #${id}`;
+          yOpt.appendChild(opt);
+        });
+      }
+
+      if (hm.blue_robots) {
+        Object.keys(hm.blue_robots).sort((a,b) => parseInt(a) - parseInt(b)).forEach(id => {
+          const opt = document.createElement("option");
+          opt.value = `blue_robot:${id}`;
+          opt.textContent = `🔵 Azul #${id}`;
+          bOpt.appendChild(opt);
+        });
+      }
+    }
+
+    function getHeatmapData(target) {
+      if (!currentMatchData?.heatmaps) return null;
+      const hm = currentMatchData.heatmaps;
+      if (target === "ball") return hm.ball;
+      if (target === "yellow") return hm.yellow;
+      if (target === "blue") return hm.blue;
+      if (target.startsWith("yellow_robot:")) {
+        const id = target.split(":")[1];
+        return hm.yellow_robots ? hm.yellow_robots[id] : null;
+      }
+      if (target.startsWith("blue_robot:")) {
+        const id = target.split(":")[1];
+        return hm.blue_robots ? hm.blue_robots[id] : null;
+      }
+      return null;
+    }
+
+    function getHeatmapColor(v) {
+      // 0.0 - 0.2: blue to cyan
+      // 0.2 - 0.45: cyan to green
+      // 0.45 - 0.75: green to yellow
+      // 0.75 - 1.0: yellow to red
+      let r = 0, g = 0, b = 0;
+      if (v <= 0.2) {
+        const t = v / 0.2;
+        r = 0;
+        g = Math.round(210 * t);
+        b = 255;
+      } else if (v <= 0.45) {
+        const t = (v - 0.2) / 0.25;
+        r = 0;
+        g = 255;
+        b = Math.round(255 * (1 - t));
+      } else if (v <= 0.75) {
+        const t = (v - 0.45) / 0.3;
+        r = Math.round(255 * t);
+        g = 255;
+        b = 0;
+      } else {
+        const t = (v - 0.75) / 0.25;
+        r = 255;
+        g = Math.round(255 * (1 - t * 0.9));
+        b = 0;
+      }
+
+      const alpha = Math.min(235, Math.round(75 + Math.pow(v, 0.8) * 160));
+      return [r, g, b, alpha];
+    }
+
+    function renderHeatmapToOffscreen(gridData, nx, ny) {
+      if (!heatmapOffscreenCanvas) {
+        heatmapOffscreenCanvas = document.createElement("canvas");
+      }
+      heatmapOffscreenCanvas.width = nx;
+      heatmapOffscreenCanvas.height = ny;
+      const offCtx = heatmapOffscreenCanvas.getContext("2d");
+      const imgData = offCtx.createImageData(nx, ny);
+      const data = imgData.data;
+
+      const sensitivity = parseFloat(document.getElementById("heatmapSensitivity")?.value) || 1.0;
+      const exp = 1.0 / Math.max(0.2, sensitivity);
+
+      for (let r = 0; r < ny; r++) {
+        const row = gridData[r] || [];
+        for (let c = 0; c < nx; c++) {
+          let val = row[c] || 0.0;
+          const idx = (r * nx + c) * 4;
+          if (val > 0.015) {
+            if (sensitivity !== 1.0) {
+              val = Math.min(1.0, Math.pow(val, exp));
+            }
+            const [cr, cg, cb, ca] = getHeatmapColor(val);
+            data[idx] = cr;
+            data[idx + 1] = cg;
+            data[idx + 2] = cb;
+            data[idx + 3] = ca;
+          } else {
+            data[idx + 3] = 0;
+          }
+        }
+      }
+
+      offCtx.putImageData(imgData, 0, 0);
+    }
+
+    function drawHeatmapOverlay() {
+      if (!currentMatchData?.heatmaps) return;
+      const hm = currentMatchData.heatmaps;
+      const target = document.getElementById("heatmapTarget")?.value || "ball";
+      const sens = document.getElementById("heatmapSensitivity")?.value || "1";
+
+      const cacheKey = `${target}_${sens}_${currentMatchData.metadata?.duration_sec}`;
+      if (cachedHeatmapTarget !== cacheKey || !heatmapOffscreenCanvas) {
+        const grid = getHeatmapData(target);
+        if (!grid || !grid.length) return;
+        renderHeatmapToOffscreen(grid, hm.nx, hm.ny);
+        cachedHeatmapTarget = cacheKey;
+      }
+
+      if (!heatmapOffscreenCanvas) return;
+
+      const left = toCanvasX(-fieldLength / 2);
+      const right = toCanvasX(fieldLength / 2);
+      const top = toCanvasY(fieldWidth / 2);
+      const bottom = toCanvasY(-fieldWidth / 2);
+
+      const opacity = parseFloat(document.getElementById("heatmapOpacity")?.value) || 0.75;
+
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(heatmapOffscreenCanvas, left, top, right - left, bottom - top);
+      ctx.restore();
+    }
+
     // Render Pass Network Graph Overlay
     function drawPassNetworkOverlay() {
       const showNetwork = document.getElementById("passNetworkToggle").checked;
@@ -1142,6 +1370,13 @@
       const f = frames[idx];
 
       drawEmptyPitch();
+
+      // Check if Spatial Heatmap is enabled
+      const showHeatmap = document.getElementById("heatmapToggle")?.checked;
+      if (showHeatmap) {
+        drawHeatmapOverlay();
+        drawPitchLinesOnly();
+      }
 
       // Check if Pass Network Overlay is enabled
       const showNetwork = document.getElementById("passNetworkToggle").checked;

@@ -1,13 +1,3 @@
-# Sistema de Análise de Dados e Avaliação Tática para a Competição SSL (RoboCup)
-
-Projeto de Iniciação Científica (PROBIC/UDESC) vinculado ao projeto de pesquisa **NPP3262-2022 - Coordenação e colaboração em Sistemas Multirrobôs**.
-
-- **Instituição:** Universidade do Estado de Santa Catarina (UDESC) - Centro de Educação do Planalto Norte (CEPLAN)
-- **Departamento:** Departamento de Sistemas de Informação
-- **Orientadora:** Profa. Dra. Vivian Cremer Kalempa
-- **Bolsista:** Davi Giraldi Michels (Edital PROPPG Nº 01/2026 - PIC&DTI)
-
----
 
 ## ⚽ Visão Geral
 
@@ -148,10 +138,3 @@ Compactação Média (Raio Spread)     |          0.99m |          0.41m
 ```
 
 ---
-
-## 📅 Próximos Passos no Cronograma da IC
-
-- [x] **Mês 1-3:** Estudo dos logs, compilação de schemas Protobuf e implementação do parser binário de alta performance (`.log` / `.log.gz`).
-- [x] **Mês 4-6:** Implementação do motor de métricas táticas (Posse de bola, Redes de passe, Pitch Control e Expected Goals).
-- [ ] **Mês 7-9:** Desenvolvimento de aplicação web interativa em **Streamlit** com reprodução contínua da partida e filtros por tempo/lance.
-- [ ] **Mês 10-12:** Testes com logs reais da RoboCup mundial e validação da estratégia com os jogos simulados no *grSim* pela equipe da UDESC. Redação do Relatório Final PROBIC e artigo científico.
