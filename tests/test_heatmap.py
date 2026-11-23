@@ -70,6 +70,39 @@ class TestSpatialHeatmap(unittest.TestCase):
         max_val = max(max(row) for row in ball_map)
         self.assertAlmostEqual(max_val, 1.0, places=2)
 
+    def test_referee_stoppage_filtering(self):
+        analyzer = SpatialHeatmapAnalyzer(field_length=12.0, field_width=9.0, grid_nx=48, grid_ny=36)
+
+        # 1. Stopped states (HALT, STOP, PREPARE_KICKOFF, TIMEOUT) should NOT accumulate
+        stopped_commands = ["HALT", "STOP", "PREPARE_KICKOFF_YELLOW", "TIMEOUT_BLUE"]
+        for cmd in stopped_commands:
+            snap = MatchSnapshot(
+                timestamp_sec=1.0,
+                referee_command=cmd,
+                ball=BallState(x=0.0, y=0.0, z=0.0, vx=0.0, vy=0.0),
+                robots_yellow={0: RobotState(robot_id=0, team="yellow", x=-1.0, y=0.0, orientation=0.0)},
+                robots_blue={0: RobotState(robot_id=0, team="blue", x=1.0, y=0.0, orientation=0.0)},
+            )
+            analyzer.process_snapshot(snap)
+
+        self.assertEqual(analyzer.ball_grid.sum(), 0.0)
+        self.assertEqual(analyzer.yellow_grid.sum(), 0.0)
+        self.assertEqual(analyzer.blue_grid.sum(), 0.0)
+
+        # 2. In-play states (NORMAL_START, FORCE_START, DIRECT_FREE) SHOULD accumulate
+        snap_play = MatchSnapshot(
+            timestamp_sec=2.0,
+            referee_command="NORMAL_START",
+            ball=BallState(x=0.0, y=0.0, z=0.0, vx=0.0, vy=0.0),
+            robots_yellow={0: RobotState(robot_id=0, team="yellow", x=-1.0, y=0.0, orientation=0.0)},
+            robots_blue={0: RobotState(robot_id=0, team="blue", x=1.0, y=0.0, orientation=0.0)},
+        )
+        analyzer.process_snapshot(snap_play)
+
+        self.assertEqual(analyzer.ball_grid.sum(), 1.0)
+        self.assertEqual(analyzer.yellow_grid.sum(), 1.0)
+        self.assertEqual(analyzer.blue_grid.sum(), 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -9,6 +9,24 @@ import numpy as np
 from src.parser.cleaner import MatchSnapshot
 
 
+IN_PLAY_COMMANDS = {
+    "NORMAL",
+    "NORMAL_START",
+    "FORCE_START",
+    "DIRECT_FREE_YELLOW",
+    "DIRECT_FREE_BLUE",
+    "INDIRECT_FREE_YELLOW",
+    "INDIRECT_FREE_BLUE",
+}
+
+
+def is_match_in_play(referee_command: Optional[str]) -> bool:
+    """Verifies whether the match is running and in active play (not stopped, halt, kickoff prep, or timeout)."""
+    if not referee_command or referee_command in ("UNKNOWN", ""):
+        return True  # Fallback if referee messages are missing in log
+    return referee_command in IN_PLAY_COMMANDS
+
+
 def gaussian_filter_2d(grid: np.ndarray, sigma: float = 1.3) -> np.ndarray:
     """Applies a fast, separable 2D Gaussian filter to a numpy grid using reflection padding."""
     if sigma <= 0.0 or grid.max() <= 0:
@@ -89,40 +107,33 @@ class SpatialHeatmapAnalyzer:
         return row, col
 
     def process_snapshot(self, snapshot: MatchSnapshot):
-        """Accumulates position counts from a match snapshot."""
+        """Accumulates position counts only when the match is actively in play according to the referee."""
+        # If match is stopped by referee (HALT, STOP, TIMEOUT, PREPARE_KICKOFF, BALL_PLACEMENT, etc.), skip frame completely
+        if not is_match_in_play(snapshot.referee_command):
+            return
+
         self.total_frames += 1
 
-        # 1. Ball (Filter dead ball sitting motionless at center during stopped/halt/kickoff states)
+        # 1. Ball
         if snapshot.ball is not None:
-            b_speed = (snapshot.ball.vx**2 + snapshot.ball.vy**2) ** 0.5
-            is_dead_center = (
-                abs(snapshot.ball.x) < 0.35
-                and abs(snapshot.ball.y) < 0.35
-                and b_speed < 0.1
-                and snapshot.referee_command
-                in ("HALT", "STOP", "TIMEOUT", "PREPARE_KICKOFF_YELLOW", "PREPARE_KICKOFF_BLUE")
-            )
-            if not is_dead_center:
-                r, c = self._pos_to_grid(snapshot.ball.x, snapshot.ball.y)
-                self.ball_grid[r, c] += 1.0
+            r, c = self._pos_to_grid(snapshot.ball.x, snapshot.ball.y)
+            self.ball_grid[r, c] += 1.0
 
-        # Ignore frames during HALT where robots are powered off/stationary by rule
-        if snapshot.referee_command != "HALT":
-            # 2. Yellow Robots
-            for r_id, bot in snapshot.robots_yellow.items():
-                r, c = self._pos_to_grid(bot.x, bot.y)
-                self.yellow_grid[r, c] += 1.0
-                if r_id not in self.yellow_robots:
-                    self.yellow_robots[r_id] = np.zeros((self.grid_ny, self.grid_nx), dtype=np.float32)
-                self.yellow_robots[r_id][r, c] += 1.0
+        # 2. Yellow Robots
+        for r_id, bot in snapshot.robots_yellow.items():
+            r, c = self._pos_to_grid(bot.x, bot.y)
+            self.yellow_grid[r, c] += 1.0
+            if r_id not in self.yellow_robots:
+                self.yellow_robots[r_id] = np.zeros((self.grid_ny, self.grid_nx), dtype=np.float32)
+            self.yellow_robots[r_id][r, c] += 1.0
 
-            # 3. Blue Robots
-            for r_id, bot in snapshot.robots_blue.items():
-                r, c = self._pos_to_grid(bot.x, bot.y)
-                self.blue_grid[r, c] += 1.0
-                if r_id not in self.blue_robots:
-                    self.blue_robots[r_id] = np.zeros((self.grid_ny, self.grid_nx), dtype=np.float32)
-                self.blue_robots[r_id][r, c] += 1.0
+        # 3. Blue Robots
+        for r_id, bot in snapshot.robots_blue.items():
+            r, c = self._pos_to_grid(bot.x, bot.y)
+            self.blue_grid[r, c] += 1.0
+            if r_id not in self.blue_robots:
+                self.blue_robots[r_id] = np.zeros((self.grid_ny, self.grid_nx), dtype=np.float32)
+            self.blue_robots[r_id][r, c] += 1.0
 
     def get_normalized_grid(
         self,
